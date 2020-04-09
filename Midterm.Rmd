@@ -1,0 +1,326 @@
+---
+title: "Midterm- CalFresh Takeup"
+author: "Rachel Hammond"
+date: "3/6/2020"
+output: html_document
+---
+
+## Set Up
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+library(maps)
+library(forcats)
+library(lubridate)
+library(readxl)
+library(RColorBrewer)
+library(colourpicker)
+```
+
+```{r}
+dashboard <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/CFDashboardData2.xlsx")
+summary <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/midterm data.xlsx")
+urbanicity <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/urbanicity.xlsx")
+calirace <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/countyracedata.xlsx")
+ihss <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/ihsspop.xlsx") 
+jandata <- read_excel("/Users/rachelhammond/Documents/Berkeley/2ndSemester/ds4pp/Labs/midterm/jandata.xlsx")
+```
+
+```{r}
+clientcolors <- c("#f98d4e", "#ffc500","#82b64d", "#107652", "#dd323f")
+```
+
+## Data Cleaning
+
+```{r}
+dashboard <- dashboard %>% 
+  mutate(american_indian = as.double(american_indian)) %>% 
+  mutate(Black = as.double(Black),
+         other_race = as.double(other_race),
+         race_unknown = as.double(race_unknown),
+         White = as.double(White),
+         more_than_one_race = as.double(more_than_one_race),
+         Hispanic = as.double(Hispanic),
+         Asian = as.double(Asian),
+         pacific_islander = as.double(pacific_islander))
+```
+
+## Take Up Plots
+```{r}
+summary %>% 
+  mutate(county = fct_reorder(county, takeupdecimal)) %>% 
+  ggplot(mapping = aes(x = county, y = takeupdecimal)) +
+  geom_point(color = "#107652") +
+  geom_hline(yintercept = .75, color = "#f98d4e") +
+  labs(y = "",
+       x= "",
+       title = "Most counties have take up rates between 50% and 70%",
+       caption = "Orange line indicates 75% take up goal set by CDSS.") +
+  coord_flip() +
+  theme_minimal() +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme(axis.text.y = element_text(size = 5))
+```
+
+```{r}
+summary %>% 
+  filter(county %in% c("Los Angeles", "San Bernardino", "San Diego", "Ventura", "San Francisco", "Shasta", "Humboldt", "Sacramento", "Tulare", "Orange", "Monterey", "San Mateo")) %>% 
+  mutate(county = fct_reorder(county, takeupdecimal)) %>% 
+  ggplot(mapping = aes(x = county, y = takeupdecimal, fill = takeupdecimal)) +
+  geom_col() +
+  geom_hline(yintercept = .75, color = "#f98d4e", size = 2) +
+  labs(x = "",
+       y = "",
+       title = "My IPA group is focusing on 12 counties",
+       caption = "Orange line indicates 75% take up goal set by CDSS.") +
+  coord_flip() +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme_classic() +
+  scale_fill_gradient(low = "gray93", high = "#107652") +
+  theme(legend.position = "none")
+```
+
+```{r}
+dashboard %>% 
+  filter(county == "Statewide") %>% 
+  filter(month != "May") %>% 
+  ggplot(mapping = aes(x = fct_reorder(month, date), y = New_SSI_Approved/1000)) +
+  geom_bar(stat = "identity", fill = "#107652") +
+  labs(x ="",
+       y= "Applications Approved (000's)",
+       title= "California enrolled 45% of the eligible SSI population in the first three months") +
+  theme_classic()
+```
+
+## Race and Language
+```{r}
+bycounty <- dashboard %>% 
+  group_by(county) %>% 
+  filter(county != "Statewide") %>% 
+  summarize(totapproved = sum(New_SSI_Approved),
+            english = sum(english),
+            spanish = sum(spanish),
+            other = sum(armenian, farsi, korean, russian, cantonese, vietnamese, cambodian, mandarin, other_language))
+```
+
+```{r}
+bycounty <- bycounty %>% 
+  left_join(summary, by = "county")
+```
+
+```{r}
+bycounty[is.na(bycounty)] <- 0
+```
+
+```{r}
+bycounty <- bycounty %>% 
+  mutate(English = english/totapproved) %>% 
+  mutate(Spanish = spanish/totapproved) %>% 
+  mutate(Other = other.x/totapproved) %>% 
+  mutate(all_other_race = morethanone + pacific_islander + american_indian + other.y + unknown)
+```
+
+```{r}
+languages <- bycounty %>% 
+  select(county, takeup, English, Spanish, Other) %>% 
+  pivot_longer(-c(county, takeup), names_to = "language", values_to = "percent")
+```
+
+```{r}
+languages <- languages %>% 
+  mutate(langvalue = case_when(language == "English" ~ 1, 
+                               language == "Spanish" ~ 2, 
+                               language == "Other" ~ 3))
+```
+
+```{r}
+languages %>% 
+  filter(county %in% c("Los Angeles", "San Bernardino", "San Diego", "Ventura", "San Francisco", "Shasta", "Humboldt", "Sacramento", "Tulare", "Orange", "Monterey", "San Mateo")) %>% 
+  mutate(county = fct_reorder(county, takeup)) %>%
+  ggplot(mapping = aes(x = county, y = percent, fill = fct_reorder(language, -langvalue))) +
+  geom_bar(stat = "identity", position = "fill", alpha = .7) +
+  coord_flip() +
+  labs(x = "",
+       y = "",
+       title = "Most counties have a majority of take up by English speakers",
+       fill = "") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  scale_fill_manual(values = clientcolors, guide = guide_legend(reverse = TRUE)) +
+  theme_classic() +
+  theme(legend.position = "bottom") 
+```
+
+```{r}
+race <- bycounty %>% 
+  select(county, takeup, White, Black, Asian, Hispanic, all_other_race) %>% 
+  pivot_longer(-c(county,takeup), names_to = "race", values_to = "percent")
+```
+
+```{r}
+race<- race %>% 
+  mutate(racevalue = case_when(race == "White" ~ 1, 
+                               race == "Hispanic" ~ 2, 
+                               race == "Asian" ~ 3,
+                               race == "Black" ~ 4,
+                               race == "all_other_race" ~ 5))
+```
+
+```{r}
+race %>% 
+  filter(county %in% c("Los Angeles", "San Bernardino", "San Diego", "Ventura", "San Francisco", "Shasta", "Humboldt", "Sacramento", "Tulare", "Orange", "Monterey", "San Mateo")) %>% 
+  mutate(county = fct_reorder(county, takeup)) %>%
+  ggplot(mapping = aes(x = county, y = percent, fill = fct_reorder(race, -racevalue))) +
+  geom_bar(stat = "identity", position = "fill", alpha = .7) +
+  coord_flip() +
+  labs(x = "",
+       y = "",
+       fill = "",
+       title = "Racial compostion of recipients varies by county") +
+  scale_fill_manual(values = clientcolors,
+                    labels = c("Other", "Black", "Asian", "Hispanic", "White"),
+                     guide = guide_legend(reverse = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme_classic() +
+  theme(legend.position = "bottom")
+```
+
+```{r}
+ihss <- ihss %>% 
+  mutate(racevalue = case_when(race == "White" ~ 1, 
+                               race == "Hispanic" ~ 2, 
+                               race == "Asian" ~ 3,
+                               race == "Black" ~ 4,
+                               race == "Other" ~ 5))
+```
+
+```{r}
+ihss %>% 
+  mutate(county = fct_reorder(county, takeup)) %>%
+  ggplot(mapping = aes(x = county, y = percent, fill = fct_reorder(race, -racevalue))) +
+  geom_bar(stat = "identity", position = "fill", alpha = .7) +
+  coord_flip() +
+  labs(x = "",
+       y = "",
+       fill = "",
+       title = "IHSS race breakdown") +
+  scale_fill_manual(values = clientcolors, guide = guide_legend(reverse = TRUE)) +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme_classic() +
+  theme(legend.position = "bottom")
+```
+
+
+
+## Map
+```{r}
+theme_map <- function(base_size=9, base_family="") {
+    require(grid)
+    theme_bw(base_size=base_size, base_family=base_family) %+replace%
+        theme(axis.line=element_blank(),
+              axis.text=element_blank(),
+              axis.ticks=element_blank(),
+              axis.title=element_blank(),
+              panel.background=element_blank(),
+              panel.border=element_blank(),
+              panel.grid=element_blank(),
+              panel.spacing=unit(0, "lines"),
+              plot.background=element_blank(),
+              legend.justification = c(0,0),
+              legend.position = c(0,0)
+              )
+}
+```
+
+```{r}
+counties <- map_data("county")
+```
+
+```{r}
+summary <- summary %>% 
+  mutate(subregion = tolower(county))
+```
+
+```{r}
+county_eligible <- counties %>% 
+  left_join(summary, by = "subregion")
+```
+
+```{r}
+calicounty <- county_eligible %>% 
+  filter(region == "california") %>% 
+  ggplot(aes(x = long, y = lat,
+           group = group)) + 
+    geom_polygon(color = "gray90", size = 0.1) +
+    coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+    guides(fill = FALSE) +
+  theme_map()
+```
+
+```{r}
+calicounty2 <- county_eligible %>% 
+  filter(region == "california") %>% 
+  ggplot(aes(x = long, y = lat, group = group, fill = takeupdecimal)) + 
+    geom_polygon(color = "gray90", size = 0.1) +
+    coord_map(projection = "albers", lat0 = 32.5, lat1 = 43) +
+  theme_map() +
+  labs(title = "Take up rates vary widely across counties", fill = "Take Up Rate") +
+  scale_fill_gradient(low = "gray93", high = "#107652", 
+                      labels = scales::percent_format(accuracy = 1))
+```
+
+```{r}
+calicounty2
+```
+
+## Correlated with Take Up?
+
+```{r}
+jandata %>% 
+  ggplot(mapping = aes(x = avgbenefitpersonssi, y = takeup)) +
+  geom_point(color = "#dd323f") +
+  labs(x = "Average Benefit Per SSI Person (USD)",
+       y = "County Take Up Rate",
+       title = "Average Benefit Amount") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 20))
+```
+
+```{r}
+jandata %>% 
+  ggplot(mapping = aes(x = SSApercent, y = takeup)) +
+  geom_point(color = "#f98d4e") +
+  labs(x = "Percent SSA Applications",
+       y = "County Take Up Rate",
+       title = "Applications Submitted by the SSA") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy=1)) +
+  theme_classic() +
+  theme(plot.title = element_text(size = 20))
+```
+
+```{r}
+urbanicity %>% 
+  ggplot(mapping= aes(x = log(eligiblesqmile), y = takeup)) +
+  geom_point(color = "#ffc500")+
+  labs(x = "Log of Eligible per Square Mile",
+       y = "County Take Up Rate",
+       title = "Density of Eligible Population") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1))+
+  theme_classic() +
+  theme(plot.title = element_text(size = 20))
+```
+
+```{r}
+bycounty %>% 
+  ggplot(mapping = aes(x = log(eligible), y = takeup)) +
+  geom_point(color = "#82b64d") +
+  theme_classic() +
+  labs(x = "Log of Eligible Population",
+       y = "County Take Up Rate",
+       title = "Size of Eligible Population") +
+  scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
+  scale_x_continuous(labels = scales::number_format(accuracy=1)) +
+  theme(plot.title = element_text(size = 20))
+```
