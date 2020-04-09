@@ -48,7 +48,7 @@ dashboard <- dashboard %>%
 
 ## Take Up Plots
 ```{r}
-summary %>% 
+plotlyex <- summary %>% 
   mutate(county = fct_reorder(county, takeupdecimal)) %>% 
   ggplot(mapping = aes(x = county, y = takeupdecimal)) +
   geom_point(color = "#107652") +
@@ -61,6 +61,14 @@ summary %>%
   theme_minimal() +
   scale_y_continuous(labels = scales::percent_format(accuracy=1)) +
   theme(axis.text.y = element_text(size = 5))
+```
+
+```{r}
+library(plotly)
+```
+
+```{r}
+ggplotly(plotlyex)
 ```
 
 ```{r}
